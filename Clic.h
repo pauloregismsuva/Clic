@@ -107,13 +107,6 @@ int    Table_select(Table *table);
 
 #define Row_MAX_CELLS 60
 
-struct _Format {
-	char formats[Row_MAX_CELLS][30];
-	bool isLeftAligned[Row_MAX_CELLS];
-	bool isCustomWidth[Row_MAX_CELLS];
-	int columns;
-};
-
 struct Format {
 	char formatString[30];
 	bool isLeftAligned;
