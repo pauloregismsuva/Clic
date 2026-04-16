@@ -1,8 +1,6 @@
+/*** CLIC is a library for creating Command Line Interfaces in the C language. ***/
 /**
- * CLIC is a library for creating Command Line Interfaces in the C language.
- *
- * Author: Paulo Regis M. Sousa <paulo_regis@uvanet.br>
- * v 1.0.0
+ * Paulo Regis M. Sousa
  */
 #ifndef CLIC_H
 #define CLIC_H
@@ -98,6 +96,8 @@ void Clic_printBox(int width, int height);
 void Clic_fixDraw();
 
 int  Clic_keyCapture();
+int  Clic_keyCaptureNonBlocking();
+
 void Clic_pause(float seconds);
 
 Table *Table_create(char *format);

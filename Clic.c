@@ -217,8 +217,6 @@ int Clic_getScreenHeight() {
 	return w.ws_row;
 }
 
-
-
 void Clic_fixDraw() {
 	Clic_move(Clic_getScreenHeight() - 1, Clic_getScreenWidth());
 	Clic_breakLine();
@@ -240,6 +238,26 @@ int Clic_keyCapture() {
         codeKey = keyPressed;
 
     Clic_setBufferOn();
+
+    return codeKey;
+}
+
+int Clic_keyCaptureNonBlocking() {
+    int keyPressed = 0;
+    int codeKey = 0;
+
+    Clic_setNonBlockingInputOn();
+    
+    keyPressed = getchar();
+
+    if (keyPressed == '\e') {  // Se a tecla for uma sequencia de escape
+        getchar(); // Ignora o caractere '['
+        codeKey = getchar();
+    }
+    else
+        codeKey = keyPressed;
+
+    Clic_setNonBlockingInputOff();
 
     return codeKey;
 }
@@ -342,7 +360,7 @@ Table *Table_create(char *format) {
         return NULL;
     }
 
-    table->highlightedIndex = 0;
+    table->highlightedIndex = 1;
     table->highlightColor = Color_YELLOW;
     
     table->formats = Format_formatSplit(format);
@@ -403,19 +421,18 @@ int Format_getCustomCellCount(Table *table) {
     return count;
 }
 
-/* 
-numColsTerminal =     numColsTable + 2
-numRowsTerminal = 2 * numRowsTable + 1
+/** 
+    numColsTerminal =     numColsTable + 2
+    numRowsTerminal = 2 * numRowsTable + 1
 
-1+------------------+     +------------------+   
-2|12345678 112345678|     |                  |     12345678 112345678   
-3|------------------|     |                  |     ------------------   
-4|12345678 112345678| --> |                  |  +  12345678 112345678   
-5|------------------|     |                  |     ------------------
-6|12345678 112345678|     |                  |     12345678 112345678
-7+------------------+     +------------------+
+    1+------------------+     +------------------+   
+    2|12345678 112345678|     |                  |     12345678 112345678   
+    3|------------------|     |                  |     ------------------   
+    4|12345678 112345678| --> |                  |  +  12345678 112345678   
+    5|------------------|     |                  |     ------------------
+    6|12345678 112345678|     |                  |     12345678 112345678
+    7+------------------+     +------------------+
 */
-
 void Table_adjustVerticalSpace(Table *table) {
     if (!table) return;
 
@@ -531,9 +548,13 @@ int Table_select(Table *table) {
                     table->highlightedIndex--; 
                 break;
             case Key_DOWN: 
-                if(table->highlightedIndex < table->nRows-1) 
+                if(table->highlightedIndex < table->nRows) 
                     table->highlightedIndex++; 
                 break;
+        }
+        
+        if (key == Key_DELETE) {
+            return (-1) * table->highlightedIndex;
         }
     }
     while (key != Key_ENTER);
@@ -614,6 +635,7 @@ void Table_addRow(Table *table, ...) {
         return;
     }
 
+    table->nRows++;
     newRow->index = table->nRows;
     newRow->length = table->nCols;
     newRow->next = NULL;
@@ -627,5 +649,4 @@ void Table_addRow(Table *table, ...) {
     }
 
     table->lastRow = newRow;
-    table->nRows++;
 }
