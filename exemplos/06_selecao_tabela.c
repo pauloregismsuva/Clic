@@ -39,7 +39,7 @@ int main(void) {
         printf("Nenhuma linha valida foi selecionada.\n");
     }
 
-    /* Veja na documentacao a limitacao de Table_free nesta versao. */
+    /* Libera a tabela, as linhas, os formatos e os textos das celulas. */
     Table_free(menu);
     return 0;
 }

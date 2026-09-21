@@ -22,7 +22,7 @@ int main(void) {
     Table_print(tabela);
     Clic_move(11, 1);
 
-    /* Veja na documentacao a limitacao de Table_free nesta versao. */
+    /* Libera a tabela, as linhas, os formatos e os textos das celulas. */
     Table_free(tabela);
     return 0;
 }

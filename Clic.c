@@ -1,4 +1,91 @@
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 700
+#endif
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+
 #include "Clic.h"
+#include <limits.h>
+#include <wchar.h>
+
+int Clic_textWidth(const char *text) {
+    if (!text) return -1;
+
+    mbstate_t state = {0};
+    size_t remaining = strlen(text);
+    int width = 0;
+
+    while (remaining > 0) {
+        wchar_t character;
+        size_t bytes = mbrtowc(&character, text, remaining, &state);
+
+        if (bytes == (size_t)-1 || bytes == (size_t)-2) return -1;
+        if (bytes == 0) break;
+
+        int columns = wcwidth(character);
+        if (columns < 0 || width > INT_MAX - columns) return -1;
+
+        width += columns;
+        text += bytes;
+        remaining -= bytes;
+    }
+
+    return width;
+}
+
+/* Keep complete multibyte characters, including trailing zero-width marks. */
+static size_t Text_prefix(const char *text, int maxWidth, int *width) {
+    mbstate_t state = {0};
+    size_t remaining = strlen(text);
+    size_t used = 0;
+    *width = 0;
+
+    while (remaining > 0) {
+        wchar_t character;
+        size_t bytes = mbrtowc(&character, text + used, remaining, &state);
+        if (bytes == 0 || bytes == (size_t)-1 || bytes == (size_t)-2) break;
+
+        int columns = wcwidth(character);
+        if (columns < 0 || columns > maxWidth - *width) break;
+
+        *width += columns;
+        used += bytes;
+        remaining -= bytes;
+    }
+
+    return used;
+}
+
+static void Text_printCell(const char *text, int width, bool leftAligned) {
+    if (width <= 0) return;
+
+    int textWidth = Clic_textWidth(text);
+    if (textWidth < 0) {
+        text = "?";
+        textWidth = 1;
+    }
+
+    size_t bytes = strlen(text);
+    const char *suffix = "";
+    int suffixWidth = 0;
+
+    if (textWidth > width) {
+        suffix = Symbol_TREE_POINTS;
+        suffixWidth = Clic_textWidth(suffix);
+        if (suffixWidth <= 0 || suffixWidth > width) {
+            suffix = ".";
+            suffixWidth = 1;
+        }
+        bytes = Text_prefix(text, width - suffixWidth, &textWidth);
+    }
+
+    int padding = width - textWidth - suffixWidth;
+    if (!leftAligned) printf("%*s", padding, "");
+    fwrite(text, 1, bytes, stdout);
+    fputs(suffix, stdout);
+    if (leftAligned) printf("%*s", padding, "");
+}
 
 void Clic_resetColor(){ 
     printf("\e[m"); 
@@ -136,17 +223,17 @@ void Clic_printBox(int width, int height) {
 }
 
 int Clic_printCenter(char *text) {
-    int width = 0, offset = 0;
-    
-    if (text) {
-        width = Clic_getScreenWidth();
-        offset = (width - strlen(text)) / 2;
+    int textWidth = Clic_textWidth(text);
+    if (textWidth < 0) return 0;
 
-        Clic_moveToColumn(offset);
-        printf("%s", text);
-    }
+    int screenWidth = Clic_getScreenWidth();
+    if (screenWidth <= 0) return 0;
 
-    return offset;
+    int visibleWidth = textWidth < screenWidth ? textWidth : screenWidth;
+    int column = 1 + (screenWidth - visibleWidth) / 2;
+    Clic_moveToColumn(column);
+    Text_printCell(text, visibleWidth, true);
+    return column;
 }
 
 
@@ -451,17 +538,35 @@ void Table_adjustVerticalSpace(Table *table) {
 void Table_printHighlight(Table *table, bool highlight) {
 	if (!table) return;
 
-    int width            = table->width;
-    int availableWidth   = width - (2 + table->nCols);
-    int totalCustomWidth = Format_getTotalCustomWidth(table);
-    int customCellCount  = Format_getCustomCellCount(table);
-    int defaultCellCount = table->nCols - customCellCount;
-    int remainingWidth   = availableWidth - totalCustomWidth;
-    int defaultCellWidth = remainingWidth / defaultCellCount;
-    int extraWidth       = remainingWidth - (defaultCellWidth * defaultCellCount);
+    int width = table->width;
+    if (table->nCols <= 0 || table->nCols > Row_MAX_CELLS ||
+        width < 2 + table->nCols) return;
+
+    int cellWidths[Row_MAX_CELLS] = {0};
+    int remainingWidth = width - (2 + table->nCols);
+    int defaultCellCount = 0;
+
+    for (int col = 0; col < table->nCols; col++) {
+        if (table->formats[col].isCustomWidth) {
+            int requested = table->formats[col].width;
+            if (requested < 0) requested = 0;
+            cellWidths[col] = requested < remainingWidth ? requested : remainingWidth;
+            remainingWidth -= cellWidths[col];
+        } else {
+            defaultCellCount++;
+        }
+    }
+
+    int defaultCellWidth = defaultCellCount > 0 ? remainingWidth / defaultCellCount : 0;
+    for (int col = 0; col < table->nCols; col++) {
+        if (!table->formats[col].isCustomWidth) {
+            cellWidths[col] = defaultCellWidth;
+            remainingWidth -= defaultCellWidth;
+        }
+    }
+    cellWidths[table->nCols - 1] += remainingWidth;
 
     Row *currentRow = table->firstRow;
-    char contentBuffer[300];
 
     Clic_saveCursorPosition();
     Clic_printUpBorder(width);
@@ -476,33 +581,14 @@ void Table_printHighlight(Table *table, bool highlight) {
         for (int col = 0; col < table->nCols; col++) {
             Cell cell = currentRow->cell[col];
 
-            int cellWidth = cell.format.isCustomWidth ? cell.format.width : defaultCellWidth;
-
-            if (col == table->nCols - 1 && extraWidth > 0) {
-                cellWidth += extraWidth;
-            }
+            int cellWidth = cellWidths[col];
 
             if (highlight && table->highlightedIndex == currentRow->index) {
                 Clic_setBackgroundColor(table->highlightColor);
                 Clic_setFontColor(Color_BLACK);
             }
 
-            if (strlen(cell.content) > cellWidth) {
-                strncpy(contentBuffer, cell.content, cellWidth - 1);
-                contentBuffer[cellWidth - 1] = '\0';
-                strcat(contentBuffer, Symbol_TREE_POINTS);
-            }
-            else {
-                strcpy(contentBuffer, cell.content);
-            }
-
-            if (cell.format.isLeftAligned) {
-                printf("%-*s", cellWidth, contentBuffer);
-            } 
-            else {
-                printf("%*s", cellWidth, contentBuffer);
-            }
-
+            Text_printCell(cell.content, cellWidth, cell.format.isLeftAligned);
             printf(" ");
 
             Clic_resetColor();
@@ -562,6 +648,39 @@ int Table_select(Table *table) {
     return table->highlightedIndex;
 }
 
+static void Row_destroy(Row *row) {
+    if (!row) return;
+    for (int col = 0; col < row->length; col++)
+        free(row->cell[col].content);
+    free(row);
+}
+
+static char *Cell_formatContent(const char *format, ...) {
+    va_list args, sizeArgs;
+    va_start(args, format);
+    va_copy(sizeArgs, args);
+    int length = vsnprintf(NULL, 0, format, sizeArgs);
+    va_end(sizeArgs);
+
+    if (length < 0) {
+        va_end(args);
+        return NULL;
+    }
+
+    size_t capacity = (size_t)length + 1;
+    char *content = malloc(capacity);
+    if (content) {
+        int written = vsnprintf(content, capacity, format, args);
+        if (written < 0 || (size_t)written >= capacity || Clic_textWidth(content) < 0) {
+            free(content);
+            content = NULL;
+        }
+    }
+
+    va_end(args);
+    return content;
+}
+
 void Table_free(Table *table) {
 	if (!table) return;
 
@@ -570,20 +689,21 @@ void Table_free(Table *table) {
 
     while (currentRow != NULL) {
         nextRow = currentRow->next;
-        free(currentRow);
+        Row_destroy(currentRow);
         currentRow = nextRow;
     }
 
+	free(table->formats);
 	free(table);
 }
 
-Row *Row_create(Table *table, va_list args) {
+Row *Row_create(Table *table, va_list *args) {
     if (table == NULL) {
         perror("Error: Row_create: table is NULL.\n");
         return NULL;
     }
 
-    Row *newRow = (Row *) malloc(sizeof(Row));
+    Row *newRow = calloc(1, sizeof(Row));
 
     if (!newRow) {
         perror("Error: Row_create: Unable to allocate memory for new Row.\n");
@@ -592,29 +712,41 @@ Row *Row_create(Table *table, va_list args) {
 
     for (int col = 0; col < table->nCols; col++) {
         char *formatString = table->formats[col].formatString;
-        char *buffer = malloc(300 * sizeof(char));
-        
-        if (strchr(formatString, 's')) {
-            char *strArg = va_arg(args, char *);
-            snprintf(buffer, 300, formatString, strArg);
-        } 
-        else if (strchr(formatString, 'd') || strchr(formatString, 'i')) {
-            int intArg = va_arg(args, int);
-            snprintf(buffer, 300, formatString, intArg);
-        } 
-        else if (strchr(formatString, 'f') || strchr(formatString, 'F')) {
-            double doubleArg = va_arg(args, double);
-            snprintf(buffer, 300, formatString, doubleArg);
-        } 
-        else {
-            snprintf(buffer, 300, "N/A");
+        char *buffer = NULL;
+
+        /* Width/precision via * and length modifiers need different arguments. */
+        if (strpbrk(formatString, "*hlLzjt") == NULL) {
+            if (strchr(formatString, 's')) {
+                char *strArg = va_arg(*args, char *);
+                /* Apply string field width only when drawing, in columns. */
+                char stringFormat[sizeof table->formats[col].formatString];
+                const char *precision = strchr(formatString, '.');
+                if (precision)
+                    snprintf(stringFormat, sizeof stringFormat, "%%%s", precision);
+                else
+                    strcpy(stringFormat, "%s");
+                if (strArg) buffer = Cell_formatContent(stringFormat, strArg);
+            }
+            else if (strchr(formatString, 'd') || strchr(formatString, 'i')) {
+                int intArg = va_arg(*args, int);
+                buffer = Cell_formatContent(formatString, intArg);
+            }
+            else if (strchr(formatString, 'f') || strchr(formatString, 'F')) {
+                double doubleArg = va_arg(*args, double);
+                buffer = Cell_formatContent(formatString, doubleArg);
+            }
+        }
+
+        if (!buffer) {
+            fprintf(stderr, "Error: Row_create: unable to format cell %d; check format, text and locale.\n", col + 1);
+            Row_destroy(newRow);
+            return NULL;
         }
 
         newRow->cell[col].content = buffer;
         newRow->cell[col].format = table->formats[col];
+        newRow->length++;
     }
-
-    va_end(args);
 
     return newRow;
 }
@@ -628,10 +760,10 @@ void Table_addRow(Table *table, ...) {
     va_list args;
     va_start(args, table);
 
-    Row *newRow = Row_create(table, args);
+    Row *newRow = Row_create(table, &args);
+    va_end(args);
 
     if (!newRow) {
-        perror("Error: Table_addRow: Unable to allocate memory for new Row.\n");
         return;
     }
 

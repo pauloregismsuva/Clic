@@ -80,6 +80,9 @@ void Clic_printHLine(int width);
 void Clic_printVLine(int height);
 void Clic_printHBlockLine(int width);
 void Clic_printVBlockLine(int height);
+/* Display columns in the current LC_CTYPE locale; -1 for invalid text,
+ * nonprintable characters, NULL or overflow. The caller selects the locale. */
+int  Clic_textWidth(const char *text);
 int  Clic_printCenter(char *text);
 
 void Clic_saveCursorPosition();
