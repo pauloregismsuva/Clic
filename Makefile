@@ -5,8 +5,10 @@ CFLAGS ?= -std=gnu11 -Wall -Wextra
 LDFLAGS ?=
 LDLIBS ?=
 BUILD_DIR ?= build
+EXAMPLE_SOURCES := $(wildcard exemplos/*.c)
+EXAMPLE_BINARIES := $(patsubst exemplos/%.c,$(BUILD_DIR)/%,$(EXAMPLE_SOURCES))
 
-.PHONY: test test-allocations clean
+.PHONY: test test-allocations examples clean
 
 test: $(BUILD_DIR)/test_text $(BUILD_DIR)/test_rows $(BUILD_DIR)/render_fixture
 	./$(BUILD_DIR)/test_text
@@ -15,6 +17,11 @@ test: $(BUILD_DIR)/test_text $(BUILD_DIR)/test_rows $(BUILD_DIR)/render_fixture
 
 $(BUILD_DIR):
 	mkdir -p $@
+
+examples: $(EXAMPLE_BINARIES)
+
+$(BUILD_DIR)/%: exemplos/%.c Clic.c Clic.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -I. $< Clic.c $(LDFLAGS) $(LDLIBS) -o $@
 
 $(BUILD_DIR)/test_text: tests/test_text.c tests/test_locale.h Clic.c Clic.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -I. tests/test_text.c Clic.c $(LDFLAGS) $(LDLIBS) -o $@

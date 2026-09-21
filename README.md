@@ -4,9 +4,9 @@ A **Clic** é uma biblioteca em C para construir interfaces de terminal com core
 
 **Autor da biblioteca:** Paulo Regis M. Sousa.  
 **Repositório:** [pauloregismsuva/Clic](https://github.com/pauloregismsuva/Clic).  
-**Licença da biblioteca:** [MIT](https://github.com/pauloregismsuva/Clic/blob/e697e0cb72976f45df7bcacf8c24cfd1e690d9d3/LICENSE).
+**Licença da biblioteca:** [MIT](LICENSE).
 
-Esta documentação descreve as **39 funções públicas declaradas em `Clic.h`**, os tipos e as constantes do commit [`e697e0c`](https://github.com/pauloregismsuva/Clic/tree/e697e0cb72976f45df7bcacf8c24cfd1e690d9d3), consultado em **17/09/2026**. As observações sobre comportamento foram conferidas na implementação de `Clic.c`. Os exemplos acompanham o documento na pasta `exemplos/`.
+Esta documentação descreve as **40 funções públicas declaradas em `Clic.h`**, incluindo `Clic_textWidth()`, e o suporte a largura visual UTF-8 atualizado em **21/09/2026**. A atualização foi preparada sobre o commit `14a8befe0a03283e87e91603e8ced70e9a537888`. O guia acompanha os arquivos desta revisão; os exemplos estão em `exemplos/` e os testes em `tests/`.
 
 ## Sumário
 
@@ -39,7 +39,7 @@ A implementação usa sequências de escape ANSI/VT e funções de ambiente POSI
 
 No Windows, o código deste commit **não compila diretamente no ambiente nativo de MSVC/MinGW**, pois inclui cabeçalhos POSIX sem uma implementação alternativa para Windows. Um ambiente Linux no WSL é uma possibilidade de uso. Compatibilidade nativa com Windows e execução em macOS não foram testadas nesta documentação.
 
-Para usar os exemplos, copie o conteúdo deste pacote para a raiz de uma cópia do repositório, mantendo `Clic.h` e `Clic.c` ao lado de `README.md` e da pasta `exemplos/`. Este pacote contém a documentação e os exemplos; os arquivos da biblioteca devem ser obtidos no repositório.
+Execute os comandos apresentados a partir da raiz do repositório, onde ficam `Clic.h`, `Clic.c`, `README.md` e as pastas `exemplos/` e `tests/`.
 
 | Caminho | Conteúdo |
 | --- | --- |
@@ -47,7 +47,9 @@ Para usar os exemplos, copie o conteúdo deste pacote para a raiz de uma cópia 
 | `Clic.c` | Implementação das funções. |
 | `LICENSE` | Licença original da biblioteca. |
 | `README.md` | Este guia e a referência da API. |
-| `exemplos/` | Sete programas pequenos e independentes. |
+| `exemplos/` | Oito programas pequenos e independentes. |
+| `tests/` | Testes de largura visual, armazenamento e renderização. |
+| `Makefile` | Compilação dos exemplos e execução dos testes. |
 | `VALIDACAO.md` | Ambiente, verificações realizadas e alcance da validação. |
 
 <a id="inicio"></a>
@@ -86,11 +88,7 @@ git clone https://github.com/pauloregismsuva/Clic.git
 cd Clic
 ```
 
-Os comandos de clonagem obtêm a versão atual do repositório. Para reproduzir exatamente a versão documentada, use uma cópia sem alterações locais e selecione o commit indicado:
-
-```bash
-git checkout --detach e697e0cb72976f45df7bcacf8c24cfd1e690d9d3
-```
+Os comandos de clonagem obtêm a versão publicada do repositório. Se a atualização UTF-8 estiver em uma branch separada, selecione essa branch antes de compilar. O exemplo `08_tabela_utf8.c` requer a função `Clic_textWidth()` adicionada por esta atualização.
 
 Também é possível compilar a biblioteca separadamente e reutilizar o objeto em vários programas:
 
@@ -102,6 +100,28 @@ gcc -std=gnu11 -Wall -Wextra -I. exemplos/01_cores.c Clic.o -o cores
 
 <a id="convencoes"></a>
 ## 3. Convenções de uso
+
+### Localidade UTF-8
+
+As strings continuam sendo `char *` terminadas em `\0`. O armazenamento é medido em bytes; o desenho passa a ser medido em colunas visuais usando `mbrtowc()` e `wcwidth()`.
+
+Antes de adicionar linhas com acentos ou outros caracteres Unicode, configure `LC_CTYPE` uma vez no início da aplicação:
+
+```c
+#include <locale.h>
+
+/* No inicio de main(), antes das operacoes com texto. */
+if (setlocale(LC_CTYPE, "") == NULL) {
+    fprintf(stderr, "Nao foi possivel configurar a localidade.\n");
+    return 1;
+}
+```
+
+O ambiente precisa selecionar uma localidade UTF-8 instalada. Apenas o retorno não nulo de `setlocale` não garante UTF-8; o exemplo 08 também confere `Clic_textWidth("Ação") == 4`. A biblioteca não altera a localidade global por conta própria. Usar apenas `LC_CTYPE` mantém a configuração de separador decimal existente.
+
+Na localidade `C` padrão, os textos ASCII continuam funcionando. Textos de células precisam ser imprimíveis: tabulações, quebras de linha, sequências ANSI embutidas e sequências inválidas são rejeitadas na inserção. Aplique cores pelas funções da Clic, fora do conteúdo da string. Não altere `LC_CTYPE` enquanto outra thread estiver medindo ou imprimindo texto.
+
+Para converter um programa existente, acrescente a inicialização da localidade, recompile `Clic.c` e preserve as chamadas `Table_create`, `Table_addRow`, `Table_print` e `Table_select`.
 
 ### Coordenadas e dimensões
 
@@ -157,6 +177,7 @@ Os arquivos são independentes: **compile um exemplo por vez**, pois cada um pos
 | [05_tabela.c](exemplos/05_tabela.c) | Tabela com texto, inteiro e ponto flutuante. | Termina após desenhar. |
 | [06_selecao_tabela.c](exemplos/06_selecao_tabela.c) | Menu usando `Table_select()` e validação do retorno. | Cima/baixo e Enter. |
 | [07_animacao.c](exemplos/07_animacao.c) | Bloco em movimento, pausa e entrada não bloqueante. | `q` minúsculo para sair. |
+| [08_tabela_utf8.c](exemplos/08_tabela_utf8.c) | Acentos, cedilha, marcas combinantes, caracteres largos e truncamento. | Termina após desenhar. |
 
 Exemplo de compilação a partir da raiz do repositório:
 
@@ -172,7 +193,17 @@ gcc -std=gnu11 -Wall -Wextra -I. exemplos/07_animacao.c Clic.c -o animacao
 ./animacao
 ```
 
-Os textos dentro das tabelas dos exemplos usam caracteres ASCII curtos para evitar as limitações atuais de medição de largura. O exemplo de menu manual usa índices de vetor iniciados em **0**; as linhas de `Table` usam índices iniciados em **1**.
+Os exemplos anteriores continuam funcionando com ASCII. O exemplo 08 inicializa a localidade e demonstra texto UTF-8. O exemplo de menu manual usa índices de vetor iniciados em **0**; as linhas de `Table` usam índices iniciados em **1**.
+
+Para compilar todos os exemplos e executar as verificações automatizadas:
+
+```bash
+make examples
+make test
+./build/08_tabela_utf8
+```
+
+`make test` requer Python 3, além do compilador e de uma localidade UTF-8 instalada. A biblioteca e os exemplos não dependem de Python. Consulte [VALIDACAO.md](VALIDACAO.md) para a verificação opcional de alocações.
 
 <a id="constantes"></a>
 ## 5. Cores e símbolos
@@ -382,13 +413,20 @@ Clic_printHBlockLine(12);
 Clic_resetColor();
 ```
 
-### 6.5. Caixas, centralização e ajuste final
+### 6.5. Largura visual, caixas, centralização e ajuste final
 
 ```c
 void Clic_printBox(int width, int height);
+int  Clic_textWidth(const char *text);
 int  Clic_printCenter(char *text);
 void Clic_fixDraw();
 ```
+
+**`Clic_textWidth(text)`** soma as larguras em colunas fornecidas por `wcwidth()` para os caracteres decodificados com `mbrtowc()` na localidade atual. Retorna `0` para a string vazia e `-1` para `NULL`, sequência inválida/incompleta, caractere não imprimível ou soma que não cabe em `int`.
+
+Em uma localidade UTF-8, `Clic_textWidth("João")` retorna `4`, embora `strlen("João")` retorne `5`. Um ideograma como `界` normalmente ocupa duas colunas; um acento combinante pode acrescentar zero. `strlen` continua apropriado para calcular espaço de armazenamento em bytes.
+
+A soma por caractere não implementa segmentação completa de grafemas. Emojis compostos, seletores de apresentação e caracteres de largura ambígua podem divergir da apresentação do terminal. Não inclua códigos ANSI na string medida.
 
 **`Clic_printBox(width, height)`** desenha uma caixa a partir do cursor atual. A largura e a altura incluem bordas; use pelo menos `2 × 2`, preferencialmente `3 × 3` ou maior quando houver conteúdo interno. O interior é preenchido com espaços, de modo que texto já existente nessa área será sobrescrito.
 
@@ -402,9 +440,9 @@ Clic_move(3, 5);
 printf("Cadastro de participantes");
 ```
 
-**`Clic_printCenter(text)`** imprime o texto na linha atual usando uma coluna calculada por `(larguraDaTela - strlen(text)) / 2` e retorna esse deslocamento como `int`. Se `text == NULL`, não imprime e retorna `0`.
+**`Clic_printCenter(text)`** usa a largura visual, imprime na linha atual e retorna a coluna inicial, contada a partir de 1. Para um texto que cabe, usa `1 + (larguraDaTela - larguraVisual) / 2`. Textos maiores que a tela são truncados com reticências e começam na coluna 1. Se `text == NULL`, o texto for inválido/não imprimível ou a largura consultada for não positiva, não imprime e retorna `0`.
 
-A implementação usa a contagem de **bytes** de `strlen` e passa o resultado diretamente à função de posicionamento, cujas colunas começam em 1. Portanto, a centralização é aproximada, pode ficar uma coluna à esquerda e não calcula corretamente a largura visual de texto multibyte. Use textos ASCII menores que a largura da tela; textos maiores não recebem tratamento adequado.
+Essa função passou a retornar a coluna efetivamente utilizada, corrigindo o deslocamento anterior. Se sua aplicação utiliza esse retorno em cálculos próprios, considere a origem em 1.
 
 ```c
 Clic_move(2, 1);
@@ -519,7 +557,7 @@ Table_print(tabela);
 Table_free(tabela);
 ```
 
-Este trecho pressupõe um terminal que comporte o desenho. Há uma limitação de liberação de memória em `Table_free()` nesta versão, descrita abaixo. Ela também afeta os exemplos com tabelas, que são programas curtos.
+Este trecho pressupõe um terminal que comporte o desenho. Para textos Unicode, configure a localidade antes de adicionar as linhas. `Table_free()` libera também os textos das células e o vetor de formatos.
 
 ### 8.2. Formatos aceitos
 
@@ -534,11 +572,13 @@ O argumento de `Table_create()` se parece com uma string de `printf`, mas o supo
 | `%-12s` | `char *` válido | Texto à esquerda com largura personalizada de 12. |
 | `%8.2f` | `double` | Número com duas casas decimais e largura personalizada de 8. |
 
-Use somente as famílias `%s`, `%d`, `%i`, `%f` e `%F`, sem modificadores de tamanho ou largura/precisão via `*`. Formatos como `%u`, `%x`, `%c`, `%p`, `%e` e `%g` não são implementados corretamente pela criação de células, embora alguns sejam reconhecidos pelo analisador. A implementação pode imprimir `N/A` e deixar de consumir argumentos, prejudicando também as colunas seguintes. Não use `%n`.
+Use somente as famílias `%s`, `%d`, `%i`, `%f` e `%F`, sem modificadores de tamanho ou largura/precisão via `*`. Outros formatos, como `%u`, `%x`, `%c`, `%p`, `%e`, `%g` e `%n`, fazem a adição da linha ser rejeitada. A linha parcial é liberada e as linhas anteriores são preservadas.
 
 Não use `%ld`, `%lld`, `%zu`, `%Lf`, `%ls`, `%*s`, `%.*f` ou `%%` como formatos de coluna. Eles não têm um contrato de uso correto nesta implementação.
 
-**Largura e precisão:** o analisador considera dígitos do especificador como largura personalizada. Por isso, `%.2f` é interpretado também como largura de coluna `2`, o que pode truncar o número. Prefira `%8.2f` e mantenha outra coluna com largura automática.
+**Largura e precisão:** o analisador ainda considera dígitos da precisão como largura personalizada. Por isso, `%.2f` também configura largura de coluna `2`. Prefira `%8.2f` para definir uma largura suficiente.
+
+Para `%s`, o preenchimento de largura é aplicado somente no desenho, em colunas visuais. A precisão explícita, como em `%.3s`, conserva a semântica de bytes do `printf`; se ela cortar uma sequência multibyte, a linha é rejeitada. Prefira `%s` ou `%-12s` e deixe a tabela truncar o texto visualmente.
 
 ### 8.3. Criação
 
@@ -565,7 +605,7 @@ void Table_setWidth(Table *table, int width);
 
 `table` é a tabela criada e `width` é a largura total pretendida em colunas, incluindo bordas. Retorno `void`. Se `table == NULL`, não faz nada. A função limita a largura ao total de colunas da tela e força um mínimo de 3; não verifica o espaço restante a partir do cursor nem se cada coluna terá espaço suficiente.
 
-**Mantenha pelo menos uma coluna sem largura explícita.** Se todas as colunas tiverem largura personalizada, o cálculo do desenho divide por zero.
+Colunas automáticas e personalizadas podem ser combinadas. Tabelas em que todas as colunas têm largura explícita também são aceitas, sem divisão por zero.
 
 Exemplo apropriado para a implementação atual:
 
@@ -575,15 +615,17 @@ Table *tabela = Table_create("%-s %d %8.2f");
 
 As duas primeiras colunas têm largura automática e a última reserva oito posições para o valor formatado.
 
-O desenho calcula o espaço básico de conteúdo assim:
+O desenho reserva o espaço de conteúdo assim:
 
 ```text
 espacoDisponivel = larguraTotal - (2 + numeroDeColunas)
-espacoRestante = espacoDisponivel - somaDasLargurasPersonalizadas
-larguraAutomatica = espacoRestante / numeroDeColunasAutomaticas
+largurasPersonalizadas = reservadas da esquerda para a direita, limitadas ao espaco restante
+larguraAutomatica = espacoRestante / numeroDeColunasAutomaticas, quando esse numero e positivo
 ```
 
-São reservadas duas posições para as bordas externas e um espaço após cada célula. O resto inteiro da divisão é acrescentado à última coluna. Garanta que a largura calculada das colunas automáticas seja positiva e comporte os dados. Para evitar problemas dos buffers internos, mantenha também larguras de células abaixo de 300 e conteúdos curtos.
+São reservadas duas posições para as bordas externas e um espaço após cada célula. O espaço final que sobrar é acrescentado à última coluna, inclusive quando todas são personalizadas. Larguras solicitadas que não couberem são reduzidas; colunas sem espaço não imprimem conteúdo. Se a largura total não comportar nem as bordas e um separador por coluna (`width < 2 + nCols`), a impressão retorna sem desenhar.
+
+Não há mais buffer fixo de 300 bytes no desenho ou nas células. Ainda é necessário escolher uma largura que caiba no terminal e permita ler os dados.
 
 `Table_setWidth()` não altera os formatos já associados às colunas. Os valores explícitos em especificadores como `%8.2f` continuam influenciando o desenho.
 
@@ -593,7 +635,7 @@ São reservadas duas posições para as bordas externas e um espaço após cada 
 void Table_addRow(Table *table, ...);
 ```
 
-Depois de `table`, forneça **um valor para cada coluna, na mesma ordem e com o tipo correspondente ao formato**. Retorno `void`. Se `table == NULL`, informa erro e retorna. A função não fornece um código de sucesso e não trata todas as falhas de alocação.
+Depois de `table`, forneça **um valor para cada coluna, na mesma ordem e com o tipo correspondente ao formato**. Retorno `void`. Se `table == NULL`, informa erro e retorna. A função não fornece um código de sucesso. Se houver falha ao construir a linha, formato não suportado, string nula, sequência inválida ou caractere não imprimível, informa erro, libera a linha parcial e preserva a tabela. A construção da própria tabela ainda possui limitações de validação descritas abaixo.
 
 ```c
 Table *tabela = Table_create("%-s %d %8.2f");
@@ -604,7 +646,7 @@ if (tabela != NULL) {
 }
 ```
 
-Cada célula recebe um buffer de 300 bytes; a conversão com `snprintf` conserva no máximo 299 bytes mais `\0`. A linha armazena uma cópia formatada do valor: alterar uma variável de origem depois da inserção não atualiza a tabela.
+Cada célula recebe um buffer dimensionado para o resultado completo da formatação, incluindo `\0`. Uma string longa não é cortada por um limite fixo de armazenamento; apenas sua apresentação é limitada à largura da coluna. Uma precisão explícita no formato continua podendo limitar o conteúdo antes do armazenamento. A linha guarda sua própria cópia: alterar uma variável de origem depois da inserção não atualiza a tabela.
 
 Os índices das linhas começam em **1**. Todas as linhas são linhas de dados: não há uma função específica para cabeçalho. Em uma coluna `%d`, não passe uma string como `"Idade"` para simular um título. Imprima o título fora da tabela, como em [05_tabela.c](exemplos/05_tabela.c), ou crie uma tabela somente de strings e converta os valores antes de adicioná-los.
 
@@ -618,7 +660,9 @@ Desenha a tabela na posição atual do cursor, sem destacar uma seleção. Retor
 
 Uma tabela não vazia com `nRows` linhas ocupa **`2 * nRows + 1` linhas de terminal**: borda superior, linhas de conteúdo, separadores e borda inferior. Não há paginação nem ajuste vertical automático implementado. Posicione a tabela de modo que ela caiba inteira na tela.
 
-O texto de uma célula pode ser truncado com `Symbol_TREE_POINTS` quando ultrapassa sua largura. O cálculo usa bytes, inclusive os três bytes UTF-8 das reticências, e não garante alinhamento visual ou integridade de caracteres multibyte em cortes. Prefira conteúdo ASCII que caiba nas colunas.
+Quando o conteúdo ultrapassa a coluna, o desenho reserva a largura visual de `Symbol_TREE_POINTS` e conserva somente caracteres multibyte completos que cabem no restante. Marcas combinantes de largura zero após o último caractere mantido são preservadas. Na localidade `C`, ou se as reticências não couberem, usa `.` como marcador. O preenchimento à esquerda/direita usa espaços calculados pela largura visual.
+
+Esse procedimento suporta acentos e caracteres largos de acordo com a localidade e o terminal; não implementa agrupamento completo de emojis compostos. Se os campos da estrutura forem alterados diretamente para conter texto inválido, o desenho substitui a célula por `?`. As inserções normais já rejeitam esse texto.
 
 A função usa internamente a posição salva do cursor e restaura os atributos de cor durante o desenho. Ela termina após a borda inferior; mova o cursor para uma linha livre antes de imprimir uma mensagem seguinte.
 
@@ -677,9 +721,7 @@ Os campos de callback existentes em `Table` não são chamados pela implementaç
 void Table_free(Table *table);
 ```
 
-Libera os nós `Row` e a estrutura `Table`. Para `NULL`, não faz nada. Retorno `void`. Após a chamada, não acesse a tabela nem suas linhas; atribua `NULL` à sua variável se for mantê-la no escopo.
-
-**Limitação confirmada no código:** esta versão não libera `table->formats` nem os buffers `Cell.content` de cada linha. Portanto, `Table_free()` ainda não libera toda a memória alocada para a tabela. Os exemplos chamam a função pública existente, mas a implementação precisa ser corrigida antes de criar e destruir tabelas repetidamente em uma aplicação de longa duração.
+Libera os buffers `Cell.content`, os nós `Row`, o vetor `table->formats` e a estrutura `Table`. Para `NULL`, não faz nada. Retorno `void`. Após a chamada, não acesse a tabela nem suas linhas; atribua `NULL` à sua variável se for mantê-la no escopo. A mesma liberação de células é usada para desfazer a construção de uma linha que falhou.
 
 <a id="tipos"></a>
 ## 9. Tipos e estruturas
@@ -752,17 +794,18 @@ Esta seção reúne os pontos que afetam diretamente a utilização. Eles descre
 | Configuração prévia especial do terminal | As funções de captura reativam flags, sem restaurar uma cópia integral do estado anterior. | Evite compartilhar o controle do terminal com outra biblioteca. |
 | `Clic_getCursorPosition` sem resposta válida | Pode bloquear ou gravar valores sem uma leitura válida. | Evite a consulta quando a aplicação já conhece suas coordenadas. |
 | Formato de tabela vazio | Pode ocorrer divisão por zero na criação. | Forneça pelo menos uma coluna suportada. |
-| Todas as colunas com largura explícita | O desenho divide por zero. | Deixe pelo menos uma coluna automática. |
-| `%.2f` em uma tabela | A precisão pode ser interpretada como largura de coluna 2. | Use largura explícita suficiente, como `%8.2f`, e outra coluna automática. |
-| Colunas sem espaço ou formatos extensos | Há caminhos de acesso fora dos limites dos buffers. | Use poucos campos, formatos de até 29 bytes, menos de 60 colunas, larguras positivas e dados curtos. |
-| Texto UTF-8 nas células ou na centralização | Bytes não equivalem a colunas visuais; cortes podem quebrar caracteres. | Prefira textos ASCII que caibam ou revise o cálculo de largura na biblioteca. |
+| `%.2f` em uma tabela | A precisão ainda pode ser interpretada como largura de coluna 2. | Use largura explícita suficiente, como `%8.2f`. |
+| Formatos extensos ou número máximo de colunas | O analisador original ainda possui limites sem validação completa. | Use formatos de até 29 bytes e de 1 a 59 colunas. |
+| Texto UTF-8 sem localidade compatível | A validação pode rejeitar a linha. | Configure `LC_CTYPE` para uma localidade UTF-8 antes de usar texto Unicode. |
+| Precisão em `%s` | Continua contando bytes e pode produzir sequência incompleta. | Prefira truncar pela largura visual da tabela; sequências incompletas são rejeitadas. |
+| Emojis compostos e largura ambígua | A soma de `wcwidth` pode diferir da apresentação do terminal. | Verifique o terminal de destino; o suporte não inclui segmentação completa de grafemas. |
+| Tabulações, quebras de linha ou códigos ANSI no conteúdo | Não são texto imprimível de uma única célula; a inserção é rejeitada. | Use células de uma linha e aplique cores pelas funções da biblioteca. |
 | Tabela maior que a tela | Não existe paginação ou compensação vertical automática. | Limite a quantidade de linhas exibidas e calcule `2 * nRows + 1`. |
 | Seta para cima na primeira linha | `Table_select()` pode retornar 0. | Valide o intervalo antes de usar `indice - 1`. |
 | Retorno negativo da seleção | A biblioteca não exclui dados nem chama callbacks. | Trate a ação explicitamente na aplicação. |
-| `Table_free` | Formatos e textos das células permanecem alocados. | Corrija a liberação antes de reutilizar tabelas em ciclos prolongados. |
 | Falhas de alocação e de leitura | Algumas verificações internas e retornos de erro não estão implementados. | Não interprete a API atual como uma garantia de tratamento completo dessas falhas. |
 
-A documentação e os exemplos foram preparados sem alterar a implementação da biblioteca. Para uma evolução do código, os pontos mais imediatos são a liberação completa das tabelas, a validação dos formatos/larguras e os limites da seleção de linhas.
+A atualização UTF-8 corrige medição, armazenamento, truncamento, preenchimento e liberação das células. Permanecem pontos independentes para evolução, principalmente a validação completa do analisador de formatos, os limites da seleção e a robustez da captura de teclado.
 
 <a id="duvidas"></a>
 ## 11. Dúvidas frequentes
@@ -813,12 +856,14 @@ Use o exemplo de [menu manual](exemplos/04_menu.c) ou o de [seleção de tabela]
 <a id="fontes"></a>
 ## 12. Validação e fontes
 
-Os sete exemplos foram compilados e executados em Linux contra os arquivos originais do commit documentado. Os detalhes, os cenários de teclado exercitados e o alcance da verificação estão em [VALIDACAO.md](VALIDACAO.md).
+Os oito exemplos foram compilados em Linux. Os testes automatizados verificam largura visual, preservação dos textos, saldo de alocações e 14 cenários de renderização. Os detalhes e o alcance da verificação estão em [VALIDACAO.md](VALIDACAO.md).
 
 Fontes principais:
 
-- [Clic.h: API pública, tipos e constantes](https://github.com/pauloregismsuva/Clic/blob/e697e0cb72976f45df7bcacf8c24cfd1e690d9d3/Clic.h).
-- [Clic.c: implementação dos comportamentos descritos](https://github.com/pauloregismsuva/Clic/blob/e697e0cb72976f45df7bcacf8c24cfd1e690d9d3/Clic.c).
-- [LICENSE: licença MIT da biblioteca](https://github.com/pauloregismsuva/Clic/blob/e697e0cb72976f45df7bcacf8c24cfd1e690d9d3/LICENSE).
+- [Clic.h: API pública, tipos e constantes](Clic.h).
+- [Clic.c: implementação dos comportamentos descritos](Clic.c).
+- [LICENSE: licença MIT da biblioteca](LICENSE).
+- [mbrtowc: conversão de caracteres na GNU C Library](https://sourceware.org/glibc/manual/latest/html_node/Converting-a-Character.html).
+- [wcwidth: largura em colunas na documentação Linux](https://man7.org/linux/man-pages/man3/wcwidth.3.html).
 
 Ao atualizar a biblioteca, revise especialmente a assinatura das funções, o tratamento das teclas e as observações sobre tabelas antes de reutilizar esta documentação como referência de uma nova versão.
