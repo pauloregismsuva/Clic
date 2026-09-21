@@ -6,7 +6,7 @@ A **Clic** é uma biblioteca em C para construir interfaces de terminal com core
 **Repositório:** [pauloregismsuva/Clic](https://github.com/pauloregismsuva/Clic).  
 **Licença da biblioteca:** [MIT](LICENSE).
 
-Esta documentação descreve as **40 funções públicas declaradas em `Clic.h`**, incluindo `Clic_textWidth()`, e o suporte a largura visual UTF-8 atualizado em **21/09/2026**. A atualização foi preparada sobre o commit `14a8befe0a03283e87e91603e8ced70e9a537888`. O guia acompanha os arquivos desta revisão; os exemplos estão em `exemplos/` e os testes em `tests/`.
+Esta documentação descreve as **40 funções públicas declaradas em `Clic.h`**, incluindo `Clic_textWidth()`, e o suporte a largura visual UTF-8 atualizado em **21/09/2026**. A atualização foi preparada sobre o commit `14a8befe0a03283e87e91603e8ced70e9a537888`. O guia acompanha os arquivos desta revisão; os exemplos estão em `exemplos/`.
 
 ## Sumário
 
@@ -21,7 +21,7 @@ Esta documentação descreve as **40 funções públicas declaradas em `Clic.h`*
 - [Tipos e estruturas](#tipos)
 - [Limitações da versão documentada](#limitacoes)
 - [Dúvidas frequentes](#duvidas)
-- [Validação e fontes](#fontes)
+- [Fontes](#fontes)
 
 <a id="requisitos"></a>
 ## 1. Requisitos e organização
@@ -39,7 +39,7 @@ A implementação usa sequências de escape ANSI/VT e funções de ambiente POSI
 
 No Windows, o código deste commit **não compila diretamente no ambiente nativo de MSVC/MinGW**, pois inclui cabeçalhos POSIX sem uma implementação alternativa para Windows. Um ambiente Linux no WSL é uma possibilidade de uso. Compatibilidade nativa com Windows e execução em macOS não foram testadas nesta documentação.
 
-Execute os comandos apresentados a partir da raiz do repositório, onde ficam `Clic.h`, `Clic.c`, `README.md` e as pastas `exemplos/` e `tests/`.
+Execute os comandos apresentados a partir da raiz do repositório, onde ficam `Clic.h`, `Clic.c`, `README.md` e a pasta `exemplos/`.
 
 | Caminho | Conteúdo |
 | --- | --- |
@@ -48,9 +48,7 @@ Execute os comandos apresentados a partir da raiz do repositório, onde ficam `C
 | `LICENSE` | Licença original da biblioteca. |
 | `README.md` | Este guia e a referência da API. |
 | `exemplos/` | Oito programas pequenos e independentes. |
-| `tests/` | Testes de largura visual, armazenamento e renderização. |
-| `Makefile` | Compilação dos exemplos e execução dos testes. |
-| `VALIDACAO.md` | Ambiente, verificações realizadas e alcance da validação. |
+| `Makefile` | Compilação dos exemplos. |
 
 <a id="inicio"></a>
 ## 2. Primeiro programa e compilação
@@ -195,15 +193,12 @@ gcc -std=gnu11 -Wall -Wextra -I. exemplos/07_animacao.c Clic.c -o animacao
 
 Os exemplos anteriores continuam funcionando com ASCII. O exemplo 08 inicializa a localidade e demonstra texto UTF-8. O exemplo de menu manual usa índices de vetor iniciados em **0**; as linhas de `Table` usam índices iniciados em **1**.
 
-Para compilar todos os exemplos e executar as verificações automatizadas:
+Para compilar todos os exemplos e executar a demonstração UTF-8:
 
 ```bash
 make examples
-make test
 ./build/08_tabela_utf8
 ```
-
-`make test` requer Python 3, além do compilador e de uma localidade UTF-8 instalada. A biblioteca e os exemplos não dependem de Python. Consulte [VALIDACAO.md](VALIDACAO.md) para a verificação opcional de alocações.
 
 <a id="constantes"></a>
 ## 5. Cores e símbolos
@@ -854,9 +849,7 @@ Esses comandos restauram modos usuais de entrada, atributos gráficos e visibili
 Use o exemplo de [menu manual](exemplos/04_menu.c) ou o de [seleção de tabela](exemplos/06_selecao_tabela.c). O primeiro controla navegação e cancelamento diretamente no programa. O segundo retorna o índice de uma linha, que deve ser validado e associado à ação desejada.
 
 <a id="fontes"></a>
-## 12. Validação e fontes
-
-Os oito exemplos foram compilados em Linux. Os testes automatizados verificam largura visual, preservação dos textos, saldo de alocações e 14 cenários de renderização. Os detalhes e o alcance da verificação estão em [VALIDACAO.md](VALIDACAO.md).
+## 12. Fontes
 
 Fontes principais:
 
