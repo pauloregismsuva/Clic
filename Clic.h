@@ -17,6 +17,7 @@
 #include <time.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+#include <locale.h>
 
 #define Symbol_HLINE "\u2501"
 #define Symbol_VLINE "\u2503"

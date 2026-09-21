@@ -435,6 +435,11 @@ Format *Format_formatSplit(char *sourceString) {
 Table *Table_create(char *format) {
 	int width = Clic_getScreenWidth();
 	
+	if (!setlocale(LC_CTYPE, "") || Clic_textWidth("Ação") != 4) {
+        fprintf(stderr, "Error: Table_create: Configure uma localidade UTF-8 antes de executar.\n");
+        return 1;
+    }
+	
 	if (format == NULL) {
 		perror("Error: Table_create: format string is null.\n");
 		return NULL;
