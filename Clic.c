@@ -495,7 +495,6 @@ void Table_printHighlight(Table *table, bool highlight) {
     int extraWidth       = remainingWidth - (defaultCellWidth * defaultCellCount);
 
     Row *currentRow = table->firstRow;
-    char contentBuffer[300];
 
     Clic_saveCursorPosition();
     Clic_printUpBorder(width);
@@ -515,6 +514,14 @@ void Table_printHighlight(Table *table, bool highlight) {
             if (col == table->nCols - 1 && extraWidth > 0) {
                 cellWidth += extraWidth;
             }
+
+            if (cellWidth <= 0) {
+                printf(" ");
+                continue;
+            }
+
+            char *contentBuffer = malloc(strlen(cell.content) + sizeof(Symbol_TREE_POINTS));
+            if (!contentBuffer) return;
 
             if (highlight && table->highlightedIndex == currentRow->index) {
                 Clic_setBackgroundColor(table->highlightColor);
@@ -538,6 +545,8 @@ void Table_printHighlight(Table *table, bool highlight) {
             }
 
             printf(" ");
+
+            free(contentBuffer);
 
             Clic_resetColor();
         }
@@ -596,6 +605,39 @@ int Table_select(Table *table) {
     return table->highlightedIndex;
 }
 
+static void Row_destroy(Row *row) {
+    if (!row) return;
+    for (int col = 0; col < row->length; col++)
+        free(row->cell[col].content);
+    free(row);
+}
+
+static char *Cell_formatContent(const char *format, ...) {
+    va_list args, sizeArgs;
+    va_start(args, format);
+    va_copy(sizeArgs, args);
+    int length = vsnprintf(NULL, 0, format, sizeArgs);
+    va_end(sizeArgs);
+
+    if (length < 0) {
+        va_end(args);
+        return NULL;
+    }
+
+    size_t capacity = (size_t)length + 1;
+    char *content = malloc(capacity);
+    if (content) {
+        int written = vsnprintf(content, capacity, format, args);
+        if (written < 0 || (size_t)written >= capacity || Clic_textWidth(content) < 0) {
+            free(content);
+            content = NULL;
+        }
+    }
+
+    va_end(args);
+    return content;
+}
+
 void Table_free(Table *table) {
 	if (!table) return;
 
@@ -604,20 +646,21 @@ void Table_free(Table *table) {
 
     while (currentRow != NULL) {
         nextRow = currentRow->next;
-        free(currentRow);
+        Row_destroy(currentRow);
         currentRow = nextRow;
     }
 
+	free(table->formats);
 	free(table);
 }
 
-Row *Row_create(Table *table, va_list args) {
+Row *Row_create(Table *table, va_list *args) {
     if (table == NULL) {
         perror("Error: Row_create: table is NULL.\n");
         return NULL;
     }
 
-    Row *newRow = (Row *) malloc(sizeof(Row));
+    Row *newRow = calloc(1, sizeof(Row));
 
     if (!newRow) {
         perror("Error: Row_create: Unable to allocate memory for new Row.\n");
@@ -626,29 +669,34 @@ Row *Row_create(Table *table, va_list args) {
 
     for (int col = 0; col < table->nCols; col++) {
         char *formatString = table->formats[col].formatString;
-        char *buffer = malloc(300 * sizeof(char));
-        
-        if (strchr(formatString, 's')) {
-            char *strArg = va_arg(args, char *);
-            snprintf(buffer, 300, formatString, strArg);
-        } 
-        else if (strchr(formatString, 'd') || strchr(formatString, 'i')) {
-            int intArg = va_arg(args, int);
-            snprintf(buffer, 300, formatString, intArg);
-        } 
-        else if (strchr(formatString, 'f') || strchr(formatString, 'F')) {
-            double doubleArg = va_arg(args, double);
-            snprintf(buffer, 300, formatString, doubleArg);
-        } 
-        else {
-            snprintf(buffer, 300, "N/A");
+        char *buffer = NULL;
+
+        /* Width/precision via * and length modifiers need different arguments. */
+        if (strpbrk(formatString, "*hlLzjt") == NULL) {
+            if (strchr(formatString, 's')) {
+                char *strArg = va_arg(*args, char *);
+                if (strArg) buffer = Cell_formatContent(formatString, strArg);
+            }
+            else if (strchr(formatString, 'd') || strchr(formatString, 'i')) {
+                int intArg = va_arg(*args, int);
+                buffer = Cell_formatContent(formatString, intArg);
+            }
+            else if (strchr(formatString, 'f') || strchr(formatString, 'F')) {
+                double doubleArg = va_arg(*args, double);
+                buffer = Cell_formatContent(formatString, doubleArg);
+            }
+        }
+
+        if (!buffer) {
+            fprintf(stderr, "Error: Row_create: unable to format cell %d; check format, text and locale.\n", col + 1);
+            Row_destroy(newRow);
+            return NULL;
         }
 
         newRow->cell[col].content = buffer;
         newRow->cell[col].format = table->formats[col];
+        newRow->length++;
     }
-
-    va_end(args);
 
     return newRow;
 }
@@ -662,10 +710,10 @@ void Table_addRow(Table *table, ...) {
     va_list args;
     va_start(args, table);
 
-    Row *newRow = Row_create(table, args);
+    Row *newRow = Row_create(table, &args);
+    va_end(args);
 
     if (!newRow) {
-        perror("Error: Table_addRow: Unable to allocate memory for new Row.\n");
         return;
     }
 
