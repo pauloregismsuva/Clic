@@ -34,6 +34,59 @@ int Clic_textWidth(const char *text) {
     return width;
 }
 
+/* Keep complete multibyte characters, including trailing zero-width marks. */
+static size_t Text_prefix(const char *text, int maxWidth, int *width) {
+    mbstate_t state = {0};
+    size_t remaining = strlen(text);
+    size_t used = 0;
+    *width = 0;
+
+    while (remaining > 0) {
+        wchar_t character;
+        size_t bytes = mbrtowc(&character, text + used, remaining, &state);
+        if (bytes == 0 || bytes == (size_t)-1 || bytes == (size_t)-2) break;
+
+        int columns = wcwidth(character);
+        if (columns < 0 || columns > maxWidth - *width) break;
+
+        *width += columns;
+        used += bytes;
+        remaining -= bytes;
+    }
+
+    return used;
+}
+
+static void Text_printCell(const char *text, int width, bool leftAligned) {
+    if (width <= 0) return;
+
+    int textWidth = Clic_textWidth(text);
+    if (textWidth < 0) {
+        text = "?";
+        textWidth = 1;
+    }
+
+    size_t bytes = strlen(text);
+    const char *suffix = "";
+    int suffixWidth = 0;
+
+    if (textWidth > width) {
+        suffix = Symbol_TREE_POINTS;
+        suffixWidth = Clic_textWidth(suffix);
+        if (suffixWidth <= 0 || suffixWidth > width) {
+            suffix = ".";
+            suffixWidth = 1;
+        }
+        bytes = Text_prefix(text, width - suffixWidth, &textWidth);
+    }
+
+    int padding = width - textWidth - suffixWidth;
+    if (!leftAligned) printf("%*s", padding, "");
+    fwrite(text, 1, bytes, stdout);
+    fputs(suffix, stdout);
+    if (leftAligned) printf("%*s", padding, "");
+}
+
 void Clic_resetColor(){ 
     printf("\e[m"); 
 }
@@ -170,17 +223,17 @@ void Clic_printBox(int width, int height) {
 }
 
 int Clic_printCenter(char *text) {
-    int width = 0, offset = 0;
-    
-    if (text) {
-        width = Clic_getScreenWidth();
-        offset = (width - strlen(text)) / 2;
+    int textWidth = Clic_textWidth(text);
+    if (textWidth < 0) return 0;
 
-        Clic_moveToColumn(offset);
-        printf("%s", text);
-    }
+    int screenWidth = Clic_getScreenWidth();
+    if (screenWidth <= 0) return 0;
 
-    return offset;
+    int visibleWidth = textWidth < screenWidth ? textWidth : screenWidth;
+    int column = 1 + (screenWidth - visibleWidth) / 2;
+    Clic_moveToColumn(column);
+    Text_printCell(text, visibleWidth, true);
+    return column;
 }
 
 
@@ -485,14 +538,33 @@ void Table_adjustVerticalSpace(Table *table) {
 void Table_printHighlight(Table *table, bool highlight) {
 	if (!table) return;
 
-    int width            = table->width;
-    int availableWidth   = width - (2 + table->nCols);
-    int totalCustomWidth = Format_getTotalCustomWidth(table);
-    int customCellCount  = Format_getCustomCellCount(table);
-    int defaultCellCount = table->nCols - customCellCount;
-    int remainingWidth   = availableWidth - totalCustomWidth;
-    int defaultCellWidth = remainingWidth / defaultCellCount;
-    int extraWidth       = remainingWidth - (defaultCellWidth * defaultCellCount);
+    int width = table->width;
+    if (table->nCols <= 0 || table->nCols > Row_MAX_CELLS ||
+        width < 2 + table->nCols) return;
+
+    int cellWidths[Row_MAX_CELLS] = {0};
+    int remainingWidth = width - (2 + table->nCols);
+    int defaultCellCount = 0;
+
+    for (int col = 0; col < table->nCols; col++) {
+        if (table->formats[col].isCustomWidth) {
+            int requested = table->formats[col].width;
+            if (requested < 0) requested = 0;
+            cellWidths[col] = requested < remainingWidth ? requested : remainingWidth;
+            remainingWidth -= cellWidths[col];
+        } else {
+            defaultCellCount++;
+        }
+    }
+
+    int defaultCellWidth = defaultCellCount > 0 ? remainingWidth / defaultCellCount : 0;
+    for (int col = 0; col < table->nCols; col++) {
+        if (!table->formats[col].isCustomWidth) {
+            cellWidths[col] = defaultCellWidth;
+            remainingWidth -= defaultCellWidth;
+        }
+    }
+    cellWidths[table->nCols - 1] += remainingWidth;
 
     Row *currentRow = table->firstRow;
 
@@ -509,44 +581,15 @@ void Table_printHighlight(Table *table, bool highlight) {
         for (int col = 0; col < table->nCols; col++) {
             Cell cell = currentRow->cell[col];
 
-            int cellWidth = cell.format.isCustomWidth ? cell.format.width : defaultCellWidth;
-
-            if (col == table->nCols - 1 && extraWidth > 0) {
-                cellWidth += extraWidth;
-            }
-
-            if (cellWidth <= 0) {
-                printf(" ");
-                continue;
-            }
-
-            char *contentBuffer = malloc(strlen(cell.content) + sizeof(Symbol_TREE_POINTS));
-            if (!contentBuffer) return;
+            int cellWidth = cellWidths[col];
 
             if (highlight && table->highlightedIndex == currentRow->index) {
                 Clic_setBackgroundColor(table->highlightColor);
                 Clic_setFontColor(Color_BLACK);
             }
 
-            if (strlen(cell.content) > cellWidth) {
-                strncpy(contentBuffer, cell.content, cellWidth - 1);
-                contentBuffer[cellWidth - 1] = '\0';
-                strcat(contentBuffer, Symbol_TREE_POINTS);
-            }
-            else {
-                strcpy(contentBuffer, cell.content);
-            }
-
-            if (cell.format.isLeftAligned) {
-                printf("%-*s", cellWidth, contentBuffer);
-            } 
-            else {
-                printf("%*s", cellWidth, contentBuffer);
-            }
-
+            Text_printCell(cell.content, cellWidth, cell.format.isLeftAligned);
             printf(" ");
-
-            free(contentBuffer);
 
             Clic_resetColor();
         }
@@ -675,7 +718,14 @@ Row *Row_create(Table *table, va_list *args) {
         if (strpbrk(formatString, "*hlLzjt") == NULL) {
             if (strchr(formatString, 's')) {
                 char *strArg = va_arg(*args, char *);
-                if (strArg) buffer = Cell_formatContent(formatString, strArg);
+                /* Apply string field width only when drawing, in columns. */
+                char stringFormat[sizeof table->formats[col].formatString];
+                const char *precision = strchr(formatString, '.');
+                if (precision)
+                    snprintf(stringFormat, sizeof stringFormat, "%%%s", precision);
+                else
+                    strcpy(stringFormat, "%s");
+                if (strArg) buffer = Cell_formatContent(stringFormat, strArg);
             }
             else if (strchr(formatString, 'd') || strchr(formatString, 'i')) {
                 int intArg = va_arg(*args, int);

@@ -1,4 +1,5 @@
 CC ?= cc
+PYTHON ?= python3
 CPPFLAGS ?=
 CFLAGS ?= -std=gnu11 -Wall -Wextra
 LDFLAGS ?=
@@ -7,9 +8,10 @@ BUILD_DIR ?= build
 
 .PHONY: test test-allocations clean
 
-test: $(BUILD_DIR)/test_text $(BUILD_DIR)/test_rows
+test: $(BUILD_DIR)/test_text $(BUILD_DIR)/test_rows $(BUILD_DIR)/render_fixture
 	./$(BUILD_DIR)/test_text
 	./$(BUILD_DIR)/test_rows
+	$(PYTHON) tests/test_render.py ./$(BUILD_DIR)/render_fixture
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -19,6 +21,9 @@ $(BUILD_DIR)/test_text: tests/test_text.c tests/test_locale.h Clic.c Clic.h | $(
 
 $(BUILD_DIR)/test_rows: tests/test_rows.c tests/test_locale.h Clic.c Clic.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -I. tests/test_rows.c Clic.c $(LDFLAGS) $(LDLIBS) -o $@
+
+$(BUILD_DIR)/render_fixture: tests/render_fixture.c tests/test_locale.h Clic.c Clic.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -I. tests/render_fixture.c Clic.c $(LDFLAGS) $(LDLIBS) -o $@
 
 test-allocations: $(BUILD_DIR)/test_allocations
 	./$(BUILD_DIR)/test_allocations
