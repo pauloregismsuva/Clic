@@ -1,4 +1,38 @@
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 700
+#endif
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+
 #include "Clic.h"
+#include <limits.h>
+#include <wchar.h>
+
+int Clic_textWidth(const char *text) {
+    if (!text) return -1;
+
+    mbstate_t state = {0};
+    size_t remaining = strlen(text);
+    int width = 0;
+
+    while (remaining > 0) {
+        wchar_t character;
+        size_t bytes = mbrtowc(&character, text, remaining, &state);
+
+        if (bytes == (size_t)-1 || bytes == (size_t)-2) return -1;
+        if (bytes == 0) break;
+
+        int columns = wcwidth(character);
+        if (columns < 0 || width > INT_MAX - columns) return -1;
+
+        width += columns;
+        text += bytes;
+        remaining -= bytes;
+    }
+
+    return width;
+}
 
 void Clic_resetColor(){ 
     printf("\e[m"); 
